@@ -44,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private FFmpeg ffmpeg;
     private ProgressDialog progressDialog;
     private Uri selectedFileUri;
-    private static final String TAG = "BHUVNESH";
+    private static final String TAG = MainActivity.class.getSimpleName();
     private static final String POSITION = "position";
     private static final String FILEPATH = "filepath";
     private int choice = 0;
@@ -54,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
     private String inputFilePath, outputFilePath;
     private File inputFile, outputFile;
     private int duration;
-    private Context mContext;
 
 
     @Override
@@ -63,9 +62,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         TextView uploadVideo = findViewById(R.id.uploadVideo);
 
-        mContext = this;
-        videoView = (VideoView) findViewById(R.id.videoView);
-        rangeSeekBar = (RangeSeekBar) findViewById(R.id.rangeSeekBar);
+        videoView = findViewById(R.id.videoView);
+        rangeSeekBar = findViewById(R.id.rangeSeekBar);
         progressDialog = new ProgressDialog(this);
         progressDialog.setTitle(null);
         progressDialog.setCancelable(false);
@@ -86,44 +84,27 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-//        decreaseSpeed.setOnClickListener(v -> {
-//            PermissionHelper.checkPermissions(new MultiplePermissionsListener() {
-//                @Override
-//                public void onPermissionsChecked(MultiplePermissionsReport multiplePermissionsReport) {
-//                    choice = 7;
-//                    if (selectedFileUri != null) {
-//                        executeSlowMotionVideoCommand();
-//                    } else
-//                        Snackbar.make(mainlayout, "Please upload a video", 4000).show();
-//                }
-//
-//
-//                @Override
-//                public void onPermissionRationaleShouldBeShown(List<PermissionRequest> list, PermissionToken permissionToken) {
-//
-//                }
-//            });
-//
-//        });
-
-
         decreaseSpeed.setOnClickListener(v -> {
             PermissionHelper.checkPermissions(new MultiplePermissionsListener() {
                 @Override
                 public void onPermissionsChecked(MultiplePermissionsReport multiplePermissionsReport) {
-                    try {
-                        FileUtils.createApplicationFolder();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    choice = 7;
+                    if (selectedFileUri != null) {
+                        executeSlowMotionVideoCommand();
+                    } else
+                        Snackbar.make(mainlayout, "Please upload a video", 4000).show();
                 }
+
 
                 @Override
                 public void onPermissionRationaleShouldBeShown(List<PermissionRequest> list, PermissionToken permissionToken) {
 
                 }
             });
+
         });
+
+
     }
 
 
@@ -148,13 +129,17 @@ public class MainActivity extends AppCompatActivity {
             if (requestCode == REQUEST_TAKE_GALLERY_VIDEO) {
                 selectedFileUri = data.getData();
                 inputFile = new File(selectedFileUri.getPath());
+                inputFilePath = FileUtils.getFilePathAsString(selectedFileUri);
+
+                outputFile = FileUtils.createOutputFile("output", "slow", ".mp4");
+                outputFilePath = outputFile.getAbsolutePath();
+
                 videoView.setVideoURI(selectedFileUri);
                 videoView.start();
 
                 videoView.setOnPreparedListener(mp -> {
                     duration = mp.getDuration() / 1000;
-
-                    mp.setLooping(true);
+                    mp.setLooping(false);
                     rangeSeekBar.setRangeValues(0, duration);
                     rangeSeekBar.setSelectedMinValue(0);
                     rangeSeekBar.setSelectedMaxValue(duration);
@@ -176,21 +161,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void executeSlowMotionVideoCommand() {
+        Log.d(TAG, "executeSlowMotionVideoCommand: started");
 
-        try {
-            outputFile = FileUtils.getPath(selectedFileUri);
-//            String[] complexCommand = {"-y", "-i", inputFile.getAbsolutePath(),
-//                    "-filter_complex",
-//                    "[0:v]setpts=2.0*PTS[v];[0:a]atempo=0.5[a]", "-map", "[v]",
-//                    "-map", "[a]", "-b:v", "2097k", "-r", "60", "-vcodec", "mpeg4", outputFile.getAbsolutePath()};
-//
-//
-//            execFFmpegBinary(complexCommand);
-        } catch (IOException e) {
-            Log.d(TAG, "executeSlowMotionVideoCommand: ");
-            e.printStackTrace();
-        }
+        String[] command = {"-y", "-i", inputFilePath,
+                "-filter_complex",
+                "[0:v]setpts=2.0*PTS[v];[0:a]atempo=0.5[a]", "-map", "[v]",
+                "-map", "[a]", "-b:v", "2097k", "-r", "60", "-vcodec", "mpeg4", outputFilePath
+        };
 
+        Log.d(TAG, "executeSlowMotionVideoCommand:input file: " + inputFile.getAbsolutePath());
+        Log.d(TAG, "executeSlowMotionVideoCommand:output file: " + outputFile.getAbsolutePath());
+
+        execFFmpegBinary(command);
 
     }
 
@@ -200,7 +182,6 @@ public class MainActivity extends AppCompatActivity {
     private void loadFFMpegBinary() {
         try {
             if (ffmpeg == null) {
-                Log.d(TAG, "ffmpeg : era nulo");
                 ffmpeg = FFmpeg.getInstance(this);
             }
             ffmpeg.loadBinary(new LoadBinaryResponseHandler() {
@@ -227,12 +208,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("Not Supported")
                 .setMessage("Device Not Supported")
                 .setCancelable(false)
-                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        MainActivity.this.finish();
-                    }
-                })
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> MainActivity.this.finish())
                 .create()
                 .show();
 
@@ -241,9 +217,15 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Executing ffmpeg binary
      */
-    private void execFFmpegBinary(final String[] command) {
+    private void execFFmpegBinary(final String[] commands) {
+        StringBuilder fullCommand = new StringBuilder();
+        for (String command : commands) {
+            fullCommand.append(command);
+
+        }
+        Log.d(TAG, "execFFmpegBinary: Started" + fullCommand.toString());
         try {
-            ffmpeg.execute(command, new ExecuteBinaryResponseHandler() {
+            ffmpeg.execute(commands, new ExecuteBinaryResponseHandler() {
                 @Override
                 public void onFailure(String s) {
                     Log.d(TAG, "FAILED with output : " + s);
@@ -254,41 +236,27 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(TAG, "SUCCESS with output : " + s);
                     if (choice == 1 || choice == 2 || choice == 5 || choice == 6 || choice == 7) {
                         Log.d(TAG, "onSuccess: 7");
-//                        Intent intent = new Intent(MainActivity.this, PreviewActivity.class);
-//                        intent.putExtra(FILEPATH, filePath);
-//                        startActivity(intent);
-                    } else if (choice == 3) {
-                        Log.d(TAG, "onSuccess: 3");
-
-//                        Intent intent = new Intent(MainActivity.this, PreviewImageActivity.class);
-//                        intent.putExtra(FILEPATH, filePath);
-//                        startActivity(intent);
-                    } else if (choice == 4) {
-                        Log.d(TAG, "onSuccess: 4");
-
-//                        Intent intent = new Intent(MainActivity.this, AudioPreviewActivity.class);
-//                        intent.putExtra(FILEPATH, filePath);
-//                        startActivity(intent);
+                        Intent intent = new Intent(MainActivity.this, PreviewActivity.class);
+                        intent.putExtra(FILEPATH, outputFilePath);
+                        startActivity(intent);
                     }
                 }
 
                 @Override
                 public void onProgress(String s) {
-                    Log.d(TAG, "Started command : ffmpeg " + command);
                     progressDialog.setMessage("progress : " + s);
-                    Log.d(TAG, "progress : " + s);
+
                 }
 
                 @Override
                 public void onStart() {
-                    Log.d(TAG, "Started command : ffmpeg " + command);
                     progressDialog.setMessage("Processing...");
                     progressDialog.show();
                 }
 
                 @Override
                 public void onFinish() {
-                    Log.d(TAG, "Finished command : ffmpeg " + command);
+                    Log.d(TAG, "Finished command : ffmpeg " + commands);
                     progressDialog.dismiss();
 
                 }
@@ -297,13 +265,5 @@ public class MainActivity extends AppCompatActivity {
             // do nothing for now
             Log.e(TAG, "execFFmpegBinary: ", e);
         }
-    }
-
-    private String getTime(int seconds) {
-        int hr = seconds / 3600;
-        int rem = seconds % 3600;
-        int mn = rem / 60;
-        int sec = rem % 60;
-        return String.format("%02d", hr) + ":" + String.format("%02d", mn) + ":" + String.format("%02d", sec);
     }
 }

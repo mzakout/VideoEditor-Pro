@@ -22,71 +22,111 @@ import java.io.IOException;
 import java.io.InputStream;
 
 public class FileUtils {
-    private static final String DIRECTORY_VIDEO_PRO = "VideoPro/";
+    private static final String DIRECTORY_VIDEO_PRO = File.separator + "VideoPro/";
     private static final String TAG = FileUtils.class.getSimpleName();
+    private final static String appFolder = Environment.getExternalStorageDirectory() + DIRECTORY_VIDEO_PRO;
 
-    public static void createApplicationFolder() throws IOException {
-
-        createExternalStoragePrivateFile();
-        String myfolder = Environment.getExternalStorageDirectory() + File.separator + DIRECTORY_VIDEO_PRO + File.separator + "dummy.txt";
-        File f = new File(myfolder);
-        Log.d(TAG, "createApplicationFolder:scr: " + f.getAbsolutePath());
-        if (!f.exists())
+    public static void createApplicationFolder() {
+        File f = new File(appFolder);
+        if (!f.exists()) {
             if (!f.mkdirs()) {
                 Log.d(TAG, "createApplicationFolder: can't be created.");
             } else {
                 Log.d(TAG, "createApplicationFolder: can be created.");
             }
-
-
-    }
-
-    static void createExternalStoragePrivateFile() throws IOException {
-        // Create a path where we will place our private file on external
-        // storage.
-        File file = new File(App.get().getExternalFilesDir(null), DIRECTORY_VIDEO_PRO + "DemoFile.jpg");
-        file.createNewFile();
-
+        } else {
+            Log.d(TAG, "createApplicationFolder: file exists");
+        }
     }
 
 
-    /**
-     * Log.d(TAG, "executeSlowMotionVideoCommand: started ");
-     * File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-     * <p>
-     * String filePrefix = "slowmotion_video";
-     * String fileExtn = ".mp4";
-     * String yourRealPath = FileUtils.getPath(MainActivity.this, selectedImageUri);
-     * <p>
-     * <p>
-     * File dest = new File(moviesDir, filePrefix + fileExtn);
-     * int fileNo = 0;
-     * while (dest.exists()) {
-     * fileNo++;
-     * dest = new File(moviesDir, filePrefix + fileNo + fileExtn);
-     * }
-     * <p>
-     * <p>
-     * Log.d(TAG, "startTrim: src: " + yourRealPath);
-     * Log.d(TAG, "startTrim: dest: " + dest.getAbsolutePath());
-     * filePath = dest.getAbsolutePath();
-     * String[] complexCommand = {"-y", "-i", yourRealPath, "-filter_complex", "[0:v]setpts=2.0*PTS[v];[0:a]atempo=0.5[a]", "-map", "[v]", "-map", "[a]", "-b:v", "2097k", "-r", "60", "-vcodec", "mpeg4", filePath};
-     */
-    public static File getPath(Uri uri) throws IOException {
-        Log.d("FileUtils", "getPath: ");
-        String filePrefix = "slowmotion_video";
+    public static String getFilePathAsString(Uri uri) {
+        Context context = App.get();
+
+        // DocumentProvider
+        if (DocumentsContract.isDocumentUri(context, uri)) {
+            // ExternalStorageProvider
+            if (isExternalStorageDocument(uri)) {
+                final String docId = DocumentsContract.getDocumentId(uri);
+                final String[] split = docId.split(":");
+                final String type = split[0];
+
+                if ("primary".equalsIgnoreCase(type)) {
+                    return Environment.getExternalStorageDirectory() + "/" + split[1];
+                }
+
+                // TODO handle non-primary volumes
+            }
+            // DownloadsProvider
+            else if (isDownloadsDocument(uri)) {
+
+                final String id = DocumentsContract.getDocumentId(uri);
+                final Uri contentUri = ContentUris.withAppendedId(Uri.parse("content://downloads/public_downloads"), Long.parseLong(id));
+
+                return getDataColumn(context, contentUri, null, null);
+            }
+            // MediaProvider
+            else if (isMediaDocument(uri)) {
+                final String docId = DocumentsContract.getDocumentId(uri);
+                final String[] split = docId.split(":");
+                final String type = split[0];
+
+                Uri contentUri = null;
+                if ("image".equals(type)) {
+                    contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                } else if ("video".equals(type)) {
+                    contentUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                } else if ("audio".equals(type)) {
+                    contentUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                }
+
+                final String selection = "_id=?";
+                final String[] selectionArgs = new String[]{
+                        split[1]
+                };
+
+                return getDataColumn(context, contentUri, selection, selectionArgs);
+            }
+        }
+        // MediaStore (and general)
+        else if ("content".equalsIgnoreCase(uri.getScheme())) {
+            return getDataColumn(context, uri, null, null);
+        }
+        // File
+        else if ("file".equalsIgnoreCase(uri.getScheme())) {
+            return uri.getPath();
+        }
+
+        return null;
+    }
+
+    public static File createOutputFile(String fileName, String command, String fileType) {
+        File realPath = new File(appFolder, fileName + command + fileType);
+        if (realPath.exists()) {
+            realPath.delete();
+            try {
+                realPath.createNewFile();
+            } catch (IOException e) {
+                Log.d(TAG, "createOutputFile: faield");
+            }
+        }
+        return realPath;
+
+    }
+
+    public static File getFilePathAsFile(String fileName) throws IOException {
+
+        String filePrefix = "SlowMotion";
         String fileExtn = ".mp4";
         int fileNo = 0;
-        File realPath = new File(Environment.getExternalStorageDirectory() + DIRECTORY_VIDEO_PRO, filePrefix + fileNo + fileExtn);
-        if (realPath.exists()) {
+        File realPath = new File(appFolder, fileName + filePrefix + fileNo + fileExtn);
+        while (realPath.exists()) {
             fileNo++;
-            realPath = new File(Environment.getExternalStorageDirectory() + DIRECTORY_VIDEO_PRO, filePrefix + fileNo + fileExtn);
+            realPath = new File(appFolder, filePrefix + fileNo + fileExtn);
         }
-        realPath.createNewFile();
-        Log.d("FileUtils", "startTrim: src: " + uri);
-        Log.d("FileUtils", "startTrim: dest: " + realPath.getAbsolutePath());
         return realPath;
     }
+
 
     private static Uri contentUri = null;
 
@@ -98,12 +138,11 @@ public class FileUtils {
      * Callers should check whether the path is local before assuming it
      * represents a local file.
      *
-     * @param context The context.
-     * @param uri     The Uri to query.
+     * @param uri The Uri to query.
      */
-    public static String getPath(final Context context, final Uri uri) {
+    public static String getPath(final Uri uri) {
         // check here to KITKAT or new version
-        final boolean isKitKat = true;
+        Context context = App.get();
         String selection = null;
         String[] selectionArgs = null;
         // DocumentProvider

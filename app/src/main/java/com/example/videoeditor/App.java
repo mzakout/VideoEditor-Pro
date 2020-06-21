@@ -1,6 +1,7 @@
 package com.example.videoeditor;
 
 import android.app.Application;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.util.List;
 
 public class App extends Application implements Thread.UncaughtExceptionHandler {
+    private static final String TAG = App.class.getSimpleName();
     private static App sInstance;
 
     public static App get() {
@@ -29,15 +31,7 @@ public class App extends Application implements Thread.UncaughtExceptionHandler 
         PermissionHelper.checkPermissions(new MultiplePermissionsListener() {
             @Override
             public void onPermissionsChecked(MultiplePermissionsReport multiplePermissionsReport) {
-
-
-                try {
-                    FileUtils.createApplicationFolder();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-
+                FileUtils.createApplicationFolder();
             }
 
             @Override
